@@ -67,42 +67,82 @@ if uploaded_file is not None:
     # SECCIÓN 2: ANÁLISIS TÉCNICO
     # ==========================================
     st.header("📉 2. Análisis del Comportamiento del Pozo (Técnico)")
-    tab1, tab2, tab3, tab4 = st.tabs(["Abatimiento", "Cooper-Jacob", "Eficiencia", "Operación"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "Abatimiento Lineal", 
+        "Abatimiento (Invertido)", 
+        "Cooper-Jacob (Auto-Ajuste)", 
+        "Caudal",
+        "Capacidad Específica",
+        "Curva de Operación"
+    ])
 
     with tab1:
+        st.markdown("**Utilidad:** Observar la tendencia general del descenso del nivel dinámico y confirmar el momento de estabilización.")
         fig1 = px.line(df, x=col_tiempo, y=col_abat, markers=True, title="Evolución del Abatimiento vs Tiempo")
         fig1.update_yaxes(autorange="reversed")
         st.plotly_chart(fig1, use_container_width=True)
 
     with tab2:
+        st.markdown("**Utilidad:** Perspectiva física intuitiva de la rapidez con la que 'cae' el nivel de agua en el pozo.")
+        fig2 = px.line(df, x=col_abat, y=col_tiempo, markers=True, title="Tiempo transcurrido vs Abatimiento")
+        fig2.update_layout(xaxis_title="Abatimiento (m)", yaxis_title="Tiempo (Horas)")
+        st.plotly_chart(fig2, use_container_width=True)
+
+    with tab3:
+        st.markdown("**Utilidad:** La app analiza la derivada del abatimiento para evadir la zona de estabilización y recomendar el segmento de flujo radial óptimo para calcular la Transmisividad (T).")
         df_log = df[df[col_tiempo] > 0].dropna(subset=[col_tiempo, col_abat, col_caudal])
+        
         if not df_log.empty:
             t_rec_inicio, t_rec_fin = detectar_flujo_radial(df_log, col_tiempo, col_abat)
-            rango_t = st.slider("Segmento de flujo radial (Recomendación automática):", min_value=float(df_log[col_tiempo].min()), max_value=float(df_log[col_tiempo].max()), value=(t_rec_inicio, t_rec_fin), step=0.1)
+            rango_t = st.slider("Segmento de flujo radial (Recomendación automática):", 
+                                min_value=float(df_log[col_tiempo].min()), 
+                                max_value=float(df_log[col_tiempo].max()), 
+                                value=(t_rec_inicio, t_rec_fin), step=0.1)
             
             mask = (df_log[col_tiempo] >= rango_t[0]) & (df_log[col_tiempo] <= rango_t[1])
             df_fit = df_log[mask]
             
             fig3 = go.Figure()
-            fig3.add_trace(go.Scatter(x=df_log[col_tiempo], y=df_log[col_abat], mode='markers', name='Datos'))
+            fig3.add_trace(go.Scatter(x=df_log[col_tiempo], y=df_log[col_abat], mode='markers', name='Datos Aforo'))
             
             if len(df_fit) > 1:
                 slope, intercept = np.polyfit(np.log10(df_fit[col_tiempo]), df_fit[col_abat], 1)
                 delta_s = abs(slope)
+                
                 if delta_s > 0.01:
-                    T_calc = (0.183 * (df_fit[col_caudal].mean() * 86.4)) / delta_s
+                    caudal_ajuste_lps = df_fit[col_caudal].mean()
+                    T_calc = (0.183 * (caudal_ajuste_lps * 86.4)) / delta_s
+                    
+                    col_res1, col_res2, col_res3 = st.columns(3)
+                    col_res1.metric("Pendiente (Δs)", f"{delta_s:.2f} m")
+                    col_res2.metric("Caudal Tramo (Q)", f"{caudal_ajuste_lps:.2f} LPS")
+                    col_res3.metric("Transmisividad (T)", f"{T_calc:.2f} m2/dia")
+                    
                     x_line = np.linspace(rango_t[0], rango_t[1], 50)
-                    fig3.add_trace(go.Scatter(x=x_line, y=slope*np.log10(x_line)+intercept, mode='lines', name='Ajuste', line=dict(color='red', dash='dash')))
-            fig3.update_layout(xaxis_type="log", xaxis_title="Tiempo [Log]", yaxis_title="Abatimiento (m)")
+                    fig3.add_trace(go.Scatter(x=x_line, y=slope*np.log10(x_line)+intercept, mode='lines', name='Ajuste Lineal', line=dict(color='red', dash='dash')))
+                else:
+                    st.warning("El segmento seleccionado es demasiado plano (estabilizado). Amplía el rango hacia la izquierda.")
+                    
+            fig3.update_layout(xaxis_type="log", xaxis_title="Tiempo (Horas) [Log]", yaxis_title="Abatimiento (m)")
             st.plotly_chart(fig3, use_container_width=True)
 
-    with tab3:
-        fig5 = px.line(df, x=col_tiempo, y='Capacidad_Especifica', markers=True, title="Capacidad Específica (LPS/m)")
+    with tab4:
+        st.markdown("**Utilidad:** Verifica la estabilidad del bombeo operativo.")
+        fig4 = px.line(df, x=col_tiempo, y=col_caudal, markers=True, title="Comportamiento del Caudal (LPS)")
+        fig4.update_traces(line_color='green')
+        st.plotly_chart(fig4, use_container_width=True)
+
+    with tab5:
+        st.markdown("**Utilidad:** Muestra la eficiencia hidráulica (Q/s).")
+        fig5 = px.line(df, x=col_tiempo, y='Capacidad_Especifica', markers=True, title="Evolución de la Capacidad Específica (LPS/m)")
+        fig5.update_traces(line_color='purple')
         st.plotly_chart(fig5, use_container_width=True)
 
-    with tab4:
-        fig6 = px.scatter(df, x=col_hz, y=col_caudal, color=col_tiempo, title="Desempeño Electromecánico (Hz vs LPS)")
+    with tab6:
+        st.markdown("**Utilidad:** Desempeño electromecánico para justificar dimensión de la bomba.")
+        fig6 = px.scatter(df, x=col_hz, y=col_caudal, color=col_tiempo, title="Desempeño Electromecánico (Hz vs LPS)", color_continuous_scale='viridis')
         st.plotly_chart(fig6, use_container_width=True)
+
     st.divider()
 
     # ==========================================
@@ -112,9 +152,11 @@ if uploaded_file is not None:
     caudal_final_lps = df[col_caudal].dropna().iloc[-1]
     tiempo_final_hrs = df[col_tiempo].max()
     
+    st.info(f"📌 **Condiciones extraídas:** Caudal = **{caudal_final_lps} LPS** | Tiempo = **{tiempo_final_hrs} Horas**")
+    
     col_t, col_s = st.columns(2)
     with col_t:
-        T_m2d = st.slider("Transmisividad Teórica (m²/día) [T]", min_value=10.0, max_value=5000.0, value=150.0, step=10.0)
+        T_m2d = st.slider("Transmisividad Teórica (m2/dia) [T]", min_value=10.0, max_value=5000.0, value=150.0, step=10.0)
     with col_s:
         S_coef = st.number_input("Almacenamiento Teórico [S]", min_value=0.00001, max_value=0.3, value=0.001, format="%.5f")
 
@@ -122,10 +164,25 @@ if uploaded_file is not None:
     u = (radios**2 * S_coef) / (4 * T_m2d * (tiempo_final_hrs / 24.0))
     abatimientos = ((caudal_final_lps * 86.4) / (4 * np.pi * T_m2d)) * exp1(u)
 
-    fig_2d = go.Figure()
-    fig_2d.add_trace(go.Scatter(x=radios, y=abatimientos, mode='lines', fill='tozeroy'))
-    fig_2d.update_layout(xaxis_type="log", yaxis=dict(autorange="reversed"), xaxis_title="Distancia (m)", yaxis_title="Abatimiento (m)", height=400)
-    st.plotly_chart(fig_2d, use_container_width=True)
+    tab_3d, tab_2d = st.tabs(["Superficie 3D", "Perfil 2D"])
+
+    with tab_3d:
+        theta = np.linspace(0, 2 * np.pi, 50)
+        R, Theta = np.meshgrid(radios, theta)
+        X = R * np.cos(Theta)
+        Y = R * np.sin(Theta)
+        Z = -np.tile(abatimientos, (50, 1))
+        
+        fig_3d = go.Figure(data=[go.Surface(z=Z, x=X, y=Y, colorscale='Viridis', opacity=0.8)])
+        fig_3d.update_layout(scene=dict(zaxis=dict(range=[np.min(Z)*1.1, 0])), margin=dict(l=0, r=0, b=0, t=30))
+        st.plotly_chart(fig_3d, use_container_width=True)
+
+    with tab_2d:
+        fig_2d = go.Figure()
+        fig_2d.add_trace(go.Scatter(x=radios, y=abatimientos, mode='lines', fill='tozeroy'))
+        fig_2d.update_layout(xaxis_type="log", yaxis=dict(autorange="reversed"), xaxis_title="Distancia (m)", yaxis_title="Abatimiento (m)", height=400)
+        st.plotly_chart(fig_2d, use_container_width=True)
+        
     st.divider()
 
     # ==========================================
@@ -158,7 +215,7 @@ if uploaded_file is not None:
     caudal_optimo = capacidad_especifica_real * abatimiento_maximo_permitido
 
     # 2. Cálculo de Transmisividad (Método de Logan)
-    # Convertimos Capacidad Específica de LPS/m a (m3/día)/m multiplicando por 86.4
+    # Convertimos Capacidad Específica de LPS/m a (m3/dia)/m multiplicando por 86.4
     ce_m3_dia_m = capacidad_especifica_real * 86.4
     transmisividad_logan = 1.22 * ce_m3_dia_m
 
@@ -167,7 +224,7 @@ if uploaded_file is not None:
     res1, res2, res3 = st.columns(3)
     res1.metric("Caudal de Estabilización (Prueba)", f"{caudal_estab:.2f} LPS")
     res2.metric("Caudal Óptimo Recomendado", f"{caudal_optimo:.2f} LPS")
-    res3.metric("Transmisividad Inferida (Acuífero)", f"{transmisividad_logan:.2f} m²/día")
+    res3.metric("Transmisividad Inferida (Acuífero)", f"{transmisividad_logan:.2f} m2/dia")
 
     # Explicaciones Ejecutivas
     st.markdown("### 📖 ¿Qué significan estos resultados?")
@@ -177,23 +234,23 @@ if uploaded_file is not None:
         **¿Qué es?** Es el volumen máximo de agua que puedes extraer de manera continua sin correr el riesgo de que el nivel del agua baje tanto que la bomba trabaje en vacío y se queme.
         
         **¿Cómo se calculó?**
-        1. Observamos que el pozo rinde **{capacidad_especifica_real:.4f} Litros por Segundo** por cada metro que desciende el agua (Capacidad Específica).
+        1. Observamos que el pozo rinde **{capacidad_especifica_real:.4f} Litros por Segundo** por cada metro que desciende el agua (Capacidad Especifica).
         2. Calculamos el espacio disponible para que el agua baje: Si la bomba está a **{ui_bomba} m**, el agua inicia en **{ui_estatico} m**, y queremos dejar un colchón de seguridad de **{ui_margen} m**, el agua solo tiene permiso de bajar un máximo de **{abatimiento_maximo_permitido:.2f} m** (Abatimiento Permitido).
-        3. Multiplicamos la capacidad del pozo por ese espacio disponible: `{capacidad_especifica_real:.4f} × {abatimiento_maximo_permitido:.2f} = {caudal_optimo:.2f} LPS`.
+        3. Multiplicamos la capacidad del pozo por ese espacio disponible: `{capacidad_especifica_real:.4f} * {abatimiento_maximo_permitido:.2f} = {caudal_optimo:.2f} LPS`.
         
         **Decisión:** Si el Caudal Óptimo es menor al Caudal de la Prueba, significa que el pozo fue forzado durante el aforo y la bomba debe seleccionarse considerando este nuevo valor conservador.
         """)
 
     with st.expander("2. Sobre la Transmisividad Inferida (Potencial del Acuífero)", expanded=True):
         st.markdown(f"""
-        **¿Qué es?** La transmisividad ($T$) es una calificación de qué tan fácil fluye el agua a través de las rocas y tierras subterráneas. Valores altos indican acuíferos abundantes (gravas, arenas); valores bajos indican rocas apretadas o arcillosas que sueltan el agua muy lentamente.
+        **¿Qué es?** La transmisividad (T) es una calificación de qué tan fácil fluye el agua a través de las rocas y tierras subterráneas. Valores altos indican acuíferos abundantes (gravas, arenas); valores bajos indican rocas apretadas o arcillosas que sueltan el agua muy lentamente.
         
         **¿Cómo se calculó?**
         Debido a que los datos iniciales de las pruebas a menudo presentan ruido por la turbulencia dentro del pozo, utilizamos el **Método Empírico de Logan**, el cual se basa en la fase de estabilización final (el dato más confiable). 
-        * Fórmula: `$T = 1.22 \times \text{Capacidad Específica (en m³/día/m)}$`
-        * Sustitución: `$T = 1.22 \times {ce_m3_dia_m:.2f} = {transmisividad_logan:.2f} \text{ m²/día}$`
+        * Fórmula: `T = 1.22 * Capacidad Especifica (en m3/dia/m)`
+        * Sustitución: `T = 1.22 * {ce_m3_dia_m:.2f} = {transmisividad_logan:.2f} m2/dia`
         
-        **Decisión:** Un valor de **{transmisividad_logan:.2f} m²/día** es la cifra que los geohidrólogos utilizarán como punto de partida para alimentar los modelos matemáticos regionales. Ayuda a sustentar si la obra de captación se encuentra en una zona de alta recarga o en una formación limitada.
+        **Decisión:** Un valor de **{transmisividad_logan:.2f} m2/dia** es la cifra que los técnicos utilizarán como punto de partida para alimentar los modelos matemáticos. Ayuda a sustentar si la obra de captación se encuentra en una zona de alta recarga o en una formación limitada.
         """)
 
 else:
