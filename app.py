@@ -33,7 +33,7 @@ st.title("💧 Sistema de Análisis de Pruebas de Aforo")
 # SECCIÓN 1: CARGA DE DATOS Y MAPEO
 # ==========================================
 st.header("📊 1. Carga de Datos y Configuración")
-uploaded_file = st.file_uploader("Sube tu archivo de aforo aquí (.csv)", type=["csv"])
+uploaded_file = st.file_uploader("Sube tu archivo de aforo aquí (.csv)", type=["csv"], key="uploader_csv")
 
 if uploaded_file is not None:
     df = pd.read_csv(uploaded_file)
@@ -252,6 +252,16 @@ if uploaded_file is not None:
         
         **Decisión:** El valor de **{transmisividad_logan:.2f} m2/dia** representa la cifra que se utiliza como punto de partida para alimentar los modelos matemáticos hidrogeológicos. Este parámetro sustenta técnicamente si la obra de captación se encuentra en una zona de alta transmisividad o en una formación limitada.
         """)
+
+    st.divider()
+
+    # ==========================================
+    # SECCIÓN 5: REINICIO DE CÁLCULOS
+    # ==========================================
+    if st.button("🔄 Empezar un nuevo cálculo (Subir otro CSV)", use_container_width=True):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
 
 else:
     st.info("Esperando archivo CSV... Sube el documento para mapear las columnas y generar el análisis técnico y el resumen ejecutivo.")
