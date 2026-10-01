@@ -51,7 +51,6 @@ if uploaded_file is not None:
     with col_sel4:
         col_hz = st.selectbox("Frecuencia (Hz):", columnas_csv, index=columnas_csv.index('Hz') if 'Hz' in columnas_csv else 0)
     with col_sel5:
-        # Intentar detectar la columna de Nivel Estático si existe para usarla después
         col_estatico = st.selectbox("Nivel Estático (m):", columnas_csv, index=columnas_csv.index('Nivel_Estatico') if 'Nivel_Estatico' in columnas_csv else 0)
 
     for col in [col_tiempo, col_caudal, col_abat, col_hz, col_estatico]:
@@ -191,38 +190,39 @@ if uploaded_file is not None:
     st.header("💡 4. Resultados para Toma de Decisiones (Resumen Ejecutivo)")
     st.markdown("""
     Esta sección traduce los datos técnicos de la prueba en respuestas claras para proteger la inversión electromecánica y comprender el potencial real del pozo. 
-    **Modifica los parámetros físicos de la instalación para simular escenarios operativos.**
+    **Modifique los parámetros físicos de la instalación para simular escenarios operativos.**
     """)
 
     st.subheader("🛠️ Variables de la Instalación (Editables)")
-    col_var1, col_var2, col_var3 = st.columns(3)
+    col_var1, col_var2, col_var3, col_var4 = st.columns(4)
     
     with col_var1:
         nivel_estatico_val = df[col_estatico].dropna().iloc[0] if col_estatico in df.columns else 38.1
-        ui_estatico = st.number_input("Nivel del agua en reposo (m):", min_value=0.0, value=float(nivel_estatico_val), step=1.0)
+        ui_estatico = st.number_input("Nivel estático (m):", min_value=0.0, value=float(nivel_estatico_val), step=1.0)
     with col_var2:
         ui_bomba = st.number_input("Profundidad de instalación de la bomba (m):", min_value=10.0, value=91.68, step=1.0)
     with col_var3:
         ui_margen = st.number_input("Margen de seguridad sobre la bomba (m):", min_value=0.0, value=10.0, step=1.0)
+    with col_var4:
+        caudal_estab_val = df[col_caudal].dropna().iloc[-1]
+        ui_caudal = st.number_input("Caudal de estabilización (LPS):", min_value=0.1, value=float(caudal_estab_val), step=0.1)
 
-    # Extracción de métricas clave estabilizadas del aforo
+    # Extracción de métrica de abatimiento del aforo
     abatimiento_max = df[col_abat].dropna().max()
-    caudal_estab = df[col_caudal].dropna().iloc[-1]
     
     # 1. Cálculo del Caudal Óptimo Seguro
-    capacidad_especifica_real = caudal_estab / abatimiento_max if abatimiento_max > 0 else 0
+    capacidad_especifica_real = ui_caudal / abatimiento_max if abatimiento_max > 0 else 0
     abatimiento_maximo_permitido = ui_bomba - ui_estatico - ui_margen
     caudal_optimo = capacidad_especifica_real * abatimiento_maximo_permitido
 
     # 2. Cálculo de Transmisividad (Método de Logan)
-    # Convertimos Capacidad Específica de LPS/m a (m3/dia)/m multiplicando por 86.4
     ce_m3_dia_m = capacidad_especifica_real * 86.4
     transmisividad_logan = 1.22 * ce_m3_dia_m
 
     # Mostrar Resultados con Tarjetas (Metrics)
     st.markdown("### 🎯 Resultados Clave")
     res1, res2, res3 = st.columns(3)
-    res1.metric("Caudal de Estabilización (Prueba)", f"{caudal_estab:.2f} LPS")
+    res1.metric("Caudal de Estabilización (Configurado)", f"{ui_caudal:.2f} LPS")
     res2.metric("Caudal Óptimo Recomendado", f"{caudal_optimo:.2f} LPS")
     res3.metric("Transmisividad Inferida (Acuífero)", f"{transmisividad_logan:.2f} m2/dia")
 
@@ -231,26 +231,26 @@ if uploaded_file is not None:
     
     with st.expander("1. Sobre el Caudal Óptimo Recomendado (Protección del Equipo)", expanded=True):
         st.markdown(f"""
-        **¿Qué es?** Es el volumen máximo de agua que puedes extraer de manera continua sin correr el riesgo de que el nivel del agua baje tanto que la bomba trabaje en vacío y se queme.
+        **¿Qué es?** Es el volumen máximo de agua que se puede extraer de manera continua sin correr el riesgo de que el nivel del agua descienda tanto que la bomba trabaje en vacío y sufra daños.
         
-        **¿Cómo se calculó?**
-        1. Observamos que el pozo rinde **{capacidad_especifica_real:.4f} Litros por Segundo** por cada metro que desciende el agua (Capacidad Especifica).
-        2. Calculamos el espacio disponible para que el agua baje: Si la bomba está a **{ui_bomba} m**, el agua inicia en **{ui_estatico} m**, y queremos dejar un colchón de seguridad de **{ui_margen} m**, el agua solo tiene permiso de bajar un máximo de **{abatimiento_maximo_permitido:.2f} m** (Abatimiento Permitido).
-        3. Multiplicamos la capacidad del pozo por ese espacio disponible: `{capacidad_especifica_real:.4f} * {abatimiento_maximo_permitido:.2f} = {caudal_optimo:.2f} LPS`.
+        **¿Cómo se calcula?**
+        1. Se observa que el pozo rinde **{capacidad_especifica_real:.4f} Litros por Segundo** por cada metro que desciende el agua (Capacidad Específica).
+        2. Se calcula el espacio disponible para que el agua descienda: Si la bomba se encuentra a **{ui_bomba} m**, el agua inicia en **{ui_estatico} m**, y se desea dejar un colchón de seguridad de **{ui_margen} m**, el agua solo tiene permitido descender un máximo de **{abatimiento_maximo_permitido:.2f} m** (Abatimiento Permitido).
+        3. Se multiplica la capacidad del pozo por el espacio disponible: `{capacidad_especifica_real:.4f} * {abatimiento_maximo_permitido:.2f} = {caudal_optimo:.2f} LPS`.
         
-        **Decisión:** Si el Caudal Óptimo es menor al Caudal de la Prueba, significa que el pozo fue forzado durante el aforo y la bomba debe seleccionarse considerando este nuevo valor conservador.
+        **Decisión:** Si el Caudal Óptimo resulta menor al Caudal de la Prueba, significa que el pozo fue forzado durante el aforo y la bomba debe seleccionarse considerando este nuevo valor conservador para asegurar su vida útil.
         """)
 
     with st.expander("2. Sobre la Transmisividad Inferida (Potencial del Acuífero)", expanded=True):
         st.markdown(f"""
-        **¿Qué es?** La transmisividad (T) es una calificación de qué tan fácil fluye el agua a través de las rocas y tierras subterráneas. Valores altos indican acuíferos abundantes (gravas, arenas); valores bajos indican rocas apretadas o arcillosas que sueltan el agua muy lentamente.
+        **¿Qué es?** La transmisividad (T) es un indicador que califica la facilidad con la que fluye el agua a través del medio geológico subterráneo. Valores altos indican acuíferos abundantes (gravas, arenas); valores bajos indican formaciones compactas o arcillosas que liberan el agua lentamente.
         
-        **¿Cómo se calculó?**
-        Debido a que los datos iniciales de las pruebas a menudo presentan ruido por la turbulencia dentro del pozo, utilizamos el **Método Empírico de Logan**, el cual se basa en la fase de estabilización final (el dato más confiable). 
+        **¿Cómo se calcula?**
+        Dado que los datos iniciales de las pruebas a menudo presentan ruido hidrodinámico por la turbulencia dentro del pozo, se utiliza el **Método Empírico de Logan**, el cual se basa en la fase de estabilización final (el dato más confiable). 
         * Fórmula: `T = 1.22 * Capacidad Especifica (en m3/dia/m)`
         * Sustitución: `T = 1.22 * {ce_m3_dia_m:.2f} = {transmisividad_logan:.2f} m2/dia`
         
-        **Decisión:** Un valor de **{transmisividad_logan:.2f} m2/dia** es la cifra que los técnicos utilizarán como punto de partida para alimentar los modelos matemáticos. Ayuda a sustentar si la obra de captación se encuentra en una zona de alta recarga o en una formación limitada.
+        **Decisión:** El valor de **{transmisividad_logan:.2f} m2/dia** representa la cifra que se utiliza como punto de partida para alimentar los modelos matemáticos hidrogeológicos. Este parámetro sustenta técnicamente si la obra de captación se encuentra en una zona de alta transmisividad o en una formación limitada.
         """)
 
 else:
