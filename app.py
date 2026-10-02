@@ -61,17 +61,18 @@ consumos_mapas = {
 consumo_base = consumos_mapas[clima][nivel_socioeconomico]
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("**Ajustes Hidráulicos**")
+st.sidebar.markdown("**Ajustes Hidráulicos y Operativos**")
 perdidas = st.sidebar.slider("Pérdidas Físicas Estimadas en la Red (%):", min_value=0, max_value=50, value=25, step=1)
+horas_bombeo = st.sidebar.slider("Horas de operación de bombeo al día:", min_value=1, max_value=24, value=18, step=1)
 cvd = st.sidebar.slider("Coeficiente de Variación Diaria (Cvd):", min_value=1.20, max_value=1.40, value=1.30, step=0.01)
 cvh = st.sidebar.number_input("Coeficiente de Variación Horaria (Cvh):", value=1.55, format="%.2f")
 
 # Cálculos Hidráulicos Oficiales
-# Dotación = Consumo Base / Eficiencia
 dotacion = consumo_base / (1 - (perdidas / 100))
 q_med = (poblacion * dotacion) / 86400
 q_md = q_med * cvd
 q_mh = q_md * cvh
+q_bombeo = (q_md * 24) / horas_bombeo if horas_bombeo > 0 else 0
 
 # Mostrar Resultados en el Panel Lateral
 st.sidebar.markdown("---")
@@ -81,17 +82,21 @@ st.sidebar.metric("Dotación Requerida", f"{dotacion:.2f} l/hab/d")
 st.sidebar.metric("Gasto Medio Diario (Qmed)", f"{q_med:.2f} l/s")
 st.sidebar.metric("Gasto Máximo Diario (QMd)", f"{q_md:.2f} l/s")
 st.sidebar.metric("Gasto Máximo Horario (QMh)", f"{q_mh:.2f} l/s")
+st.sidebar.metric("Gasto de Bombeo (Qb)", f"{q_bombeo:.2f} l/s")
 
 # Explicación Detallada Dinámica
 with st.sidebar.expander("📖 ¿Qué significan estos resultados y cómo se obtuvieron?"):
     st.markdown(f"""
     Los resultados mostrados se han adaptado de forma específica a los datos ingresados:
     
-    *   **Consumo Base ({consumo_base} l/hab/d):** Es la cantidad teórica de agua que consume directamente cada habitante. Se obtuvo cruzando tu selección de clima '{clima}' y estrato socioeconómico '{nivel_socioeconomico}' con la *Tabla 2.2* del MAPAS de CONAGUA.
-    *   **Dotación Requerida ({dotacion:.2f} l/hab/d):** Es la verdadera cantidad de agua que el organismo debe inyectar a la red por cada habitante. Surge de sumarle al consumo base el **{perdidas}%** de agua que se perderá por fugas o tomas clandestinas durante el transporte.
-    *   **Gasto Medio Diario (Qmed = {q_med:.2f} l/s):** Indica el caudal promedio y constante que tu nueva fuente de abastecimiento (por ejemplo, el pozo que vas a aforar) debe producir ininterrumpidamente durante todo el año para satisfacer a los {poblacion} habitantes. Se obtiene transformando la dotación diaria a litros por segundo.
-    *   **Gasto Máximo Diario (QMd = {q_md:.2f} l/s):** Representa el caudal que demandará la ciudad en el día más caluroso o activo del año. Se calculó afectando el Qmed con tu factor de **{cvd}**. Este dato sirve para diseñar las líneas de conducción principales y plantas potabilizadoras.
-    *   **Gasto Máximo Horario (QMh = {q_mh:.2f} l/s):** Es el caudal de mayor impacto en la red, ocurrido en la "hora pico" del día de mayor consumo. Se calculó afectando los picos previos por el factor normativo de **{cvh}**. Este valor se utiliza exclusivamente para seleccionar los diámetros de las tuberías de distribución en las calles, asegurando que el agua llegue con presión a todas las casas.
+    *   **Consumo Base ({consumo_base} l/hab/d):** Representa la cantidad teórica de agua que consume directamente cada habitante. Se obtuvo cruzando la selección de clima '{clima}' y estrato socioeconómico '{nivel_socioeconomico}' con la *Tabla 2.2* del MAPAS de CONAGUA.
+    *   **Dotación Requerida ({dotacion:.2f} l/hab/d):** Es la cantidad total de agua que el organismo operador debe inyectar a la red por cada habitante. Surge de sumar al consumo base el **{perdidas}%** de agua que se estimó se perderá por fugas o tomas clandestinas durante su transporte.
+    *   **Gasto Medio Diario (Qmed = {q_med:.2f} l/s):** Indica el caudal promedio continuo que la fuente de abastecimiento debe producir de manera ininterrumpida durante el año para satisfacer a los {poblacion} habitantes. Se obtiene al transformar el volumen de la dotación diaria a litros por segundo.
+    *   **Coeficiente de Variación Diaria (Cvd = {cvd}):** Es un factor normativo que representa cómo fluctúa la demanda de agua en el día de mayor consumo del año respecto a un día promedio.
+    *   **Gasto Máximo Diario (QMd = {q_md:.2f} l/s):** Representa el caudal que demandará la ciudad en el día de mayor consumo del año. Se calculó afectando el Qmed con el factor de variación diaria de **{cvd:.2f}**. Este dato sirve para dimensionar las líneas de conducción principales y las plantas potabilizadoras.
+    *   **Coeficiente de Variación Horaria (Cvh = {cvh}):** Representa la fluctuación de la demanda dentro de un mismo día. Indica qué tanto se eleva el consumo durante la "hora pico" (cuando la mayoría de la población usa el agua simultáneamente) en comparación con el promedio de ese día.
+    *   **Gasto Máximo Horario (QMh = {q_mh:.2f} l/s):** Es el caudal de mayor impacto en la red, ocurrido en la hora pico del día de mayor consumo. Se calculó multiplicando el Gasto Máximo Diario por el factor normativo de **{cvh:.2f}**. Se utiliza para seleccionar los diámetros de las tuberías de distribución en las calles, asegurando presiones adecuadas.
+    *   **Gasto de Bombeo (Qb = {q_bombeo:.2f} l/s):** Determina el caudal real que debe extraer el equipo de bombeo de la captación, compensando el hecho de que no operará continuamente. Se calculó multiplicando el Gasto Máximo Diario por 24 horas y dividiéndolo entre las **{horas_bombeo}** horas de operación seleccionadas. Esta cifra es el punto de diseño electromecánico para la selección de la bomba del pozo.
     """)
 
 # ==========================================
@@ -104,7 +109,7 @@ if uploaded_file is not None:
     df = pd.read_csv(uploaded_file)
     columnas_csv = df.columns.tolist()
     
-    st.subheader("⚙️️ Configuración de Variables")
+    st.subheader("⚙️ Configuración de Variables")
     col_sel1, col_sel2, col_sel3, col_sel4, col_sel5 = st.columns(5)
     
     with col_sel1:
