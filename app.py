@@ -36,6 +36,65 @@ st.set_page_config(page_title="Análisis de Aforo de Pozos", layout="wide")
 st.title("💧 Sistema de Análisis de Pruebas de Aforo")
 
 # ==========================================
+# PANEL IZQUIERDO: GASTO ESTIMADO POR POBLACIÓN (MAPAS)
+# ==========================================
+st.sidebar.header("👥 Cálculo de Gasto Comunitario")
+st.sidebar.markdown("Estimación basada en los parámetros del **Manual de Agua Potable, Alcantarillado y Saneamiento (MAPAS)** de la CONAGUA.")
+
+# Variables Editables
+poblacion = st.sidebar.number_input("Número de Habitantes (Población de Proyecto):", min_value=1, value=10000, step=100)
+
+clima = st.sidebar.selectbox("Clima Predominante de la Región:", 
+                             ["Cálido Húmedo", "Cálido Subhúmedo", "Seco o Muy Seco", "Templado o Frío"])
+
+nivel_socioeconomico = st.sidebar.selectbox("Nivel Socioeconómico:", 
+                                            ["Promedio", "Bajo", "Medio", "Alto"])
+
+# Diccionario extraído de la Tabla 2.2 del MAPAS
+consumos_mapas = {
+    "Cálido Húmedo": {"Bajo": 198, "Medio": 206, "Alto": 243, "Promedio": 201},
+    "Cálido Subhúmedo": {"Bajo": 175, "Medio": 203, "Alto": 217, "Promedio": 191},
+    "Seco o Muy Seco": {"Bajo": 184, "Medio": 191, "Alto": 202, "Promedio": 190},
+    "Templado o Frío": {"Bajo": 140, "Medio": 142, "Alto": 145, "Promedio": 142}
+}
+
+consumo_base = consumos_mapas[clima][nivel_socioeconomico]
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("**Ajustes Hidráulicos**")
+perdidas = st.sidebar.slider("Pérdidas Físicas Estimadas en la Red (%):", min_value=0, max_value=50, value=25, step=1)
+cvd = st.sidebar.slider("Coeficiente de Variación Diaria (Cvd):", min_value=1.20, max_value=1.40, value=1.30, step=0.01)
+cvh = st.sidebar.number_input("Coeficiente de Variación Horaria (Cvh):", value=1.55, format="%.2f")
+
+# Cálculos Hidráulicos Oficiales
+# Dotación = Consumo Base / Eficiencia
+dotacion = consumo_base / (1 - (perdidas / 100))
+q_med = (poblacion * dotacion) / 86400
+q_md = q_med * cvd
+q_mh = q_md * cvh
+
+# Mostrar Resultados en el Panel Lateral
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 📊 Demandas de Diseño")
+st.sidebar.metric("Consumo Base de Agua", f"{consumo_base} l/hab/d")
+st.sidebar.metric("Dotación Requerida", f"{dotacion:.2f} l/hab/d")
+st.sidebar.metric("Gasto Medio Diario (Qmed)", f"{q_med:.2f} l/s")
+st.sidebar.metric("Gasto Máximo Diario (QMd)", f"{q_md:.2f} l/s")
+st.sidebar.metric("Gasto Máximo Horario (QMh)", f"{q_mh:.2f} l/s")
+
+# Explicación Detallada Dinámica
+with st.sidebar.expander("📖 ¿Qué significan estos resultados y cómo se obtuvieron?"):
+    st.markdown(f"""
+    Los resultados mostrados se han adaptado de forma específica a los datos ingresados:
+    
+    *   **Consumo Base ({consumo_base} l/hab/d):** Es la cantidad teórica de agua que consume directamente cada habitante. Se obtuvo cruzando tu selección de clima '{clima}' y estrato socioeconómico '{nivel_socioeconomico}' con la *Tabla 2.2* del MAPAS de CONAGUA.
+    *   **Dotación Requerida ({dotacion:.2f} l/hab/d):** Es la verdadera cantidad de agua que el organismo debe inyectar a la red por cada habitante. Surge de sumarle al consumo base el **{perdidas}%** de agua que se perderá por fugas o tomas clandestinas durante el transporte.
+    *   **Gasto Medio Diario (Qmed = {q_med:.2f} l/s):** Indica el caudal promedio y constante que tu nueva fuente de abastecimiento (por ejemplo, el pozo que vas a aforar) debe producir ininterrumpidamente durante todo el año para satisfacer a los {poblacion} habitantes. Se obtiene transformando la dotación diaria a litros por segundo.
+    *   **Gasto Máximo Diario (QMd = {q_md:.2f} l/s):** Representa el caudal que demandará la ciudad en el día más caluroso o activo del año. Se calculó afectando el Qmed con tu factor de **{cvd}**. Este dato sirve para diseñar las líneas de conducción principales y plantas potabilizadoras.
+    *   **Gasto Máximo Horario (QMh = {q_mh:.2f} l/s):** Es el caudal de mayor impacto en la red, ocurrido en la "hora pico" del día de mayor consumo. Se calculó afectando los picos previos por el factor normativo de **{cvh}**. Este valor se utiliza exclusivamente para seleccionar los diámetros de las tuberías de distribución en las calles, asegurando que el agua llegue con presión a todas las casas.
+    """)
+
+# ==========================================
 # SECCIÓN 1: CARGA DE DATOS Y MAPEO
 # ==========================================
 st.header("📊 1. Carga de Datos y Configuración")
@@ -45,7 +104,7 @@ if uploaded_file is not None:
     df = pd.read_csv(uploaded_file)
     columnas_csv = df.columns.tolist()
     
-    st.subheader("⚙️ Configuración de Variables")
+    st.subheader("⚙️️ Configuración de Variables")
     col_sel1, col_sel2, col_sel3, col_sel4, col_sel5 = st.columns(5)
     
     with col_sel1:
