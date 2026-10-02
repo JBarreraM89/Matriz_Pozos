@@ -82,11 +82,13 @@ if uploaded_file is not None:
     ])
 
     with tab1:
+        st.markdown("**Utilidad:** Observar la tendencia general del descenso del nivel dinámico y confirmar el momento de estabilización.")
         fig1 = px.line(df, x=col_tiempo, y=col_abat, markers=True, title="Evolución del Abatimiento vs Tiempo")
         fig1.update_yaxes(autorange="reversed")
         st.plotly_chart(fig1, use_container_width=True)
 
     with tab2:
+        st.markdown("**Utilidad:** Perspectiva física intuitiva de la rapidez con la que 'cae' el nivel de agua en el pozo.")
         fig2 = px.line(df, x=col_abat, y=col_tiempo, markers=True, title="Tiempo transcurrido vs Abatimiento")
         fig2.update_layout(xaxis_title="Abatimiento (m)", yaxis_title="Tiempo (Horas)")
         st.plotly_chart(fig2, use_container_width=True)
@@ -130,16 +132,19 @@ if uploaded_file is not None:
             st.plotly_chart(fig3, use_container_width=True)
 
     with tab4:
+        st.markdown("**Utilidad:** Verifica la estabilidad del bombeo operativo.")
         fig4 = px.line(df, x=col_tiempo, y=col_caudal, markers=True, title="Comportamiento del Caudal (LPS)")
         fig4.update_traces(line_color='green')
         st.plotly_chart(fig4, use_container_width=True)
 
     with tab5:
+        st.markdown("**Utilidad:** Muestra la eficiencia hidráulica (Q/s).")
         fig5 = px.line(df, x=col_tiempo, y='Capacidad_Especifica', markers=True, title="Evolución de la Capacidad Específica (LPS/m)")
         fig5.update_traces(line_color='purple')
         st.plotly_chart(fig5, use_container_width=True)
 
     with tab6:
+        st.markdown("**Utilidad:** Desempeño electromecánico para justificar dimensión de la bomba.")
         fig6 = px.scatter(df, x=col_hz, y=col_caudal, color=col_tiempo, title="Desempeño Electromecánico (Hz vs LPS)", color_continuous_scale='viridis')
         st.plotly_chart(fig6, use_container_width=True)
 
@@ -189,6 +194,10 @@ if uploaded_file is not None:
     # SECCIÓN 4: RESUMEN EJECUTIVO (TOMA DE DECISIONES)
     # ==========================================
     st.header("💡 4. Resultados para Toma de Decisiones (Resumen Ejecutivo)")
+    st.markdown("""
+    Esta sección traduce los datos técnicos de la prueba en respuestas claras para proteger la inversión electromecánica y comprender el potencial real del pozo. 
+    **Modifique los parámetros físicos de la instalación para simular escenarios operativos.**
+    """)
 
     st.subheader("🛠️ Variables de la Instalación (Editables)")
     col_var1, col_var2, col_var3, col_var4 = st.columns(4)
@@ -204,18 +213,52 @@ if uploaded_file is not None:
         caudal_estab_val = df[col_caudal].dropna().iloc[-1]
         ui_caudal = st.number_input("Caudal de estabilización (LPS):", min_value=0.1, value=float(caudal_estab_val), step=0.1)
 
+    # Extracción de métrica de abatimiento del aforo
     abatimiento_max = df[col_abat].dropna().max()
+    
+    # 1. Cálculo del Caudal Óptimo Seguro
     capacidad_especifica_real = ui_caudal / abatimiento_max if abatimiento_max > 0 else 0
     abatimiento_maximo_permitido = ui_bomba - ui_estatico - ui_margen
     caudal_optimo = capacidad_especifica_real * abatimiento_maximo_permitido
+
+    # 2. Cálculo de Transmisividad (Método de Logan)
     ce_m3_dia_m = capacidad_especifica_real * 86.4
     transmisividad_logan = 1.22 * ce_m3_dia_m
 
+    # Mostrar Resultados con Tarjetas (Metrics)
+    st.markdown("### 🎯 Resultados Clave")
     res1, res2, res3 = st.columns(3)
     res1.metric("Caudal de Estabilización (Configurado)", f"{ui_caudal:.2f} LPS")
     res2.metric("Caudal Óptimo Recomendado", f"{caudal_optimo:.2f} LPS")
     res3.metric("Transmisividad Inferida (Acuífero)", f"{transmisividad_logan:.2f} m2/dia")
+
+    # Explicaciones Ejecutivas
+    st.markdown("### 📖 ¿Qué significan estos resultados?")
     
+    with st.expander("1. Sobre el Caudal Óptimo Recomendado (Protección del Equipo)", expanded=True):
+        st.markdown(f"""
+        **¿Qué es?** Es el volumen máximo de agua que se puede extraer de manera continua sin correr el riesgo de que el nivel del agua descienda tanto que la bomba trabaje en vacío y sufra daños.
+        
+        **¿Cómo se calcula?**
+        1. Se observa que el pozo rinde **{capacidad_especifica_real:.4f} Litros por Segundo** por cada metro que desciende el agua (Capacidad Específica).
+        2. Se calcula el espacio disponible para que el agua descienda: Si la bomba se encuentra a **{ui_bomba} m**, el agua inicia en **{ui_estatico} m**, y se desea dejar un colchón de seguridad de **{ui_margen} m**, el agua solo tiene permitido descender un máximo de **{abatimiento_maximo_permitido:.2f} m** (Abatimiento Permitido).
+        3. Se multiplica la capacidad del pozo por el espacio disponible: `{capacidad_especifica_real:.4f} * {abatimiento_maximo_permitido:.2f} = {caudal_optimo:.2f} LPS`.
+        
+        **Decisión:** Si el Caudal Óptimo resulta menor al Caudal de la Prueba, significa que el pozo fue forzado durante el aforo y la bomba debe seleccionarse considerando este nuevo valor conservador para asegurar su vida útil.
+        """)
+
+    with st.expander("2. Sobre la Transmisividad Inferida (Potencial del Acuífero)", expanded=True):
+        st.markdown(f"""
+        **¿Qué es?** La transmisividad (T) es un indicador que califica la facilidad con la que fluye el agua a través del medio geológico subterráneo. Valores altos indican acuíferos abundantes (gravas, arenas); valores bajos indican formaciones compactas o arcillosas que liberan el agua lentamente.
+        
+        **¿Cómo se calcula?**
+        Dado que los datos iniciales de las pruebas a menudo presentan ruido hidrodinámico por la turbulencia dentro del pozo, se utiliza el **Método Empírico de Logan**, el cual se basa en la fase de estabilización final (el dato más confiable). 
+        * Fórmula: `T = 1.22 * Capacidad Especifica (en m3/dia/m)`
+        * Sustitución: `T = 1.22 * {ce_m3_dia_m:.2f} = {transmisividad_logan:.2f} m2/dia`
+        
+        **Decisión:** El valor de **{transmisividad_logan:.2f} m2/dia** representa la cifra que se utiliza como punto de partida para alimentar los modelos matemáticos hidrogeológicos. Este parámetro sustenta técnicamente si la obra de captación se encuentra en una zona de alta transmisividad o en una formación limitada.
+        """)
+
     st.divider()
 
     # ==========================================
@@ -257,20 +300,16 @@ if uploaded_file is not None:
             st.rerun()
 
     with col_map2:
-        # Lógica para centrar el mapa
         if not st.session_state.puntos_mapa.empty:
             centro_lat = st.session_state.puntos_mapa['Latitud'].mean()
             centro_lon = st.session_state.puntos_mapa['Longitud'].mean()
             zoom_inicial = 10
         else:
-            # Centrado en México por defecto si no hay puntos
             centro_lat, centro_lon = 23.6345, -102.5528
             zoom_inicial = 5
 
-        # Creación del objeto Mapa de Folium
         m = folium.Map(location=[centro_lat, centro_lon], zoom_start=zoom_inicial)
 
-        # Capas Base
         folium.TileLayer(
             tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
             attr='Esri',
@@ -294,10 +333,8 @@ if uploaded_file is not None:
             control=True
         ).add_to(m)
 
-        # Mapeo de colores por tipo
         colores_tipo = {"Pozo de Bombeo": "blue", "Piezómetro de Observación": "green", "Manantial": "lightblue"}
 
-        # Agregar marcadores
         for idx, row in st.session_state.puntos_mapa.iterrows():
             color_icono = colores_tipo.get(row.get('Tipo', 'Pozo de Bombeo'), "gray")
             folium.Marker(
@@ -307,13 +344,10 @@ if uploaded_file is not None:
                 icon=folium.Icon(color=color_icono, icon='tint')
             ).add_to(m)
 
-        # Agregar el control de capas (permite alternar entre topografía, satélite, etc.)
         folium.LayerControl().add_to(m)
 
-        # Renderizar el mapa en Streamlit
         st_folium(m, width=800, height=500, returned_objects=[])
 
-    # Tabla de Simbología y Atributos
     if not st.session_state.puntos_mapa.empty:
         st.subheader("📋 Tabla de Atributos y Simbología")
         st.dataframe(st.session_state.puntos_mapa, use_container_width=True)
@@ -323,10 +357,10 @@ if uploaded_file is not None:
     # ==========================================
     # SECCIÓN 6: REINICIO DE CÁLCULOS
     # ==========================================
-    if st.button("🔄 Empezar un nuevo cálculo (Limpiar Sesión Completa)", use_container_width=True):
+    if st.button("🔄 Empezar un nuevo cálculo (Subir otro CSV y limpiar mapa)", use_container_width=True):
         for key in list(st.session_state.keys()):
             del st.session_state[key]
         st.rerun()
 
 else:
-    st.info("Esperando archivo CSV del aforo... Sube el documento para mapear las columnas y generar el análisis técnico.")
+    st.info("Esperando archivo CSV... Sube el documento para mapear las columnas y generar el análisis técnico y el resumen ejecutivo.")
