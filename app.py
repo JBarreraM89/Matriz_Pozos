@@ -10,7 +10,7 @@ from streamlit_folium import st_folium
 
 # --- GESTOR DE ESTADO PARA EL MAPA ---
 if 'puntos_mapa' not in st.session_state:
-    st.session_state.puntos_mapa = pd.DataFrame(columns=['Identificador', 'Latitud', 'Longitud', 'Tipo'])
+    st.session_state.puntos_mapa = pd.DataFrame(columns=['Identificador', 'Latitud', 'Longitud', 'Tipo', 'Color', 'Icono'])
 
 # --- FUNCIÓN: Algoritmo de Detección de Flujo Radial ---
 def detectar_flujo_radial(df, col_t, col_s):
@@ -116,7 +116,6 @@ st.sidebar.metric("Gasto Máximo Diario (QMd)", f"{q_md:.2f} l/s")
 st.sidebar.metric("Gasto Máximo Horario (QMh)", f"{q_mh:.2f} l/s")
 st.sidebar.metric("Gasto de Bombeo (Qb)", f"{q_bombeo:.2f} l/s")
 
-# Explicación Detallada Dinámica
 with st.sidebar.expander("📖 ¿Qué significan estos resultados y cómo se obtuvieron?"):
     st.markdown(f"""
     Los resultados mostrados se han adaptado de forma específica a los datos ingresados:
@@ -372,9 +371,6 @@ if uploaded_file is not None:
     res2.metric("Caudal Óptimo Recomendado", f"{caudal_optimo:.2f} LPS")
     res3.metric("Transmisividad Inferida (Acuífero)", f"{transmisividad_logan:.2f} m2/dia")
 
-    # Explicaciones Ejecutivas
-    st.markdown("### 📖 ¿Qué significan estos resultados?")
-    
     with st.expander("1. Sobre el Caudal Óptimo Recomendado (Protección del Equipo)", expanded=True):
         st.markdown(f"""
         **¿Qué es?** Es el volumen máximo de agua que se puede extraer de manera continua sin correr el riesgo de que el nivel del agua descienda tanto que la bomba trabaje en vacío y sufra daños.
@@ -402,110 +398,106 @@ if uploaded_file is not None:
     st.divider()
 
     # ==========================================
-    # SECCIÓN 5: GEOVISOR ESPACIAL
+    # SECCIÓN 5: GEOVISOR ESPACIAL (PANTALLA COMPLETA)
     # ==========================================
     st.header("🗺️ 5. Geovisor Espacial de Captaciones")
-    st.markdown("Integra tus puntos de extracción en el entorno espacial. Alterna entre mapas topográficos, hidrográficos y de localidades en el control de capas (esquina superior derecha del mapa).")
+    st.markdown("Integra tus puntos de extracción en el entorno espacial. Alterna entre mapas topográficos, hidrográficos y de localidades en el control de capas.")
 
-    # Controles para agregar puntos
-    col_map1, col_map2 = st.columns([1, 2])
-    
-    with col_map1:
-        st.subheader("📍 Agregar Puntos")
+    # Opciones de personalización global
+    colores_disponibles = ["blue", "red", "green", "purple", "orange", "darkred", "lightred", "beige", "darkblue", "darkgreen", "cadetblue", "darkpurple", "white", "pink", "lightblue", "lightgreen", "gray", "black", "lightgray"]
+    iconos_disponibles = ["tint", "info-sign", "star", "flag", "map-marker", "circle", "play", "cloud", "camera"]
+
+    # Menú desplegable para los controles
+    with st.expander("📍 Abrir Controles para Agregar Puntos", expanded=True):
         tab_manual, tab_csv = st.tabs(["Ingreso Manual", "Cargar Archivo CSV"])
         
         with tab_manual:
             with st.form("form_mapa_manual"):
-                nombre_punto = st.text_input("Identificador del Pozo:")
-                lat_punto = st.number_input("Latitud (Decimales):", value=23.6345, format="%.6f")
-                lon_punto = st.number_input("Longitud (Decimales):", value=-102.5528, format="%.6f")
-                tipo_punto = st.selectbox("Tipo:", ["Pozo de Bombeo", "Piezómetro de Observación", "Manantial"])
+                col_man1, col_man2, col_man3 = st.columns(3)
+                with col_man1:
+                    nombre_punto = st.text_input("Identificador del Pozo:")
+                    tipo_punto = st.selectbox("Tipo:", ["Pozo de Bombeo", "Piezómetro de Observación", "Manantial"])
+                with col_man2:
+                    lat_punto = st.number_input("Latitud (Decimales):", value=23.6345, format="%.6f")
+                    lon_punto = st.number_input("Longitud (Decimales):", value=-102.5528, format="%.6f")
+                with col_man3:
+                    color_manual = st.selectbox("Color del Marcador:", colores_disponibles, index=0)
+                    icono_manual = st.selectbox("Ícono del Marcador:", iconos_disponibles, index=0)
                 
                 if st.form_submit_button("➕ Agregar al Mapa"):
-                    nuevo_punto = pd.DataFrame([{'Identificador': nombre_punto, 'Latitud': lat_punto, 'Longitud': lon_punto, 'Tipo': tipo_punto}])
+                    nuevo_punto = pd.DataFrame([{
+                        'Identificador': nombre_punto, 'Latitud': lat_punto, 'Longitud': lon_punto, 
+                        'Tipo': tipo_punto, 'Color': color_manual, 'Icono': icono_manual
+                    }])
                     st.session_state.puntos_mapa = pd.concat([st.session_state.puntos_mapa, nuevo_punto], ignore_index=True)
                     st.success(f"Punto '{nombre_punto}' agregado.")
                     
         with tab_csv:
-            st.info("El CSV debe contener las columnas: 'Identificador', 'Latitud', 'Longitud', 'Tipo'.")
+            st.info("El CSV debe contener al menos las columnas: 'Identificador', 'Latitud', 'Longitud', 'Tipo'.")
             csv_mapa = st.file_uploader("Subir coordenadas (.csv)", type=["csv"], key="map_csv")
+            
+            st.markdown("🎨 **Personaliza el estilo de esta serie antes de importar:**")
+            col_csv1, col_csv2 = st.columns(2)
+            with col_csv1:
+                color_serie = st.selectbox("Color para toda la serie:", colores_disponibles, index=1)
+            with col_csv2:
+                icono_serie = st.selectbox("Ícono para toda la serie:", iconos_disponibles, index=0)
+
             if csv_mapa is not None:
-                if st.button("📥 Importar Puntos"):
+                if st.button("📥 Importar Serie al Mapa"):
                     df_nuevos = pd.read_csv(csv_mapa)
+                    # Forzamos el color e ícono seleccionado a todos los puntos de este CSV
+                    df_nuevos['Color'] = color_serie
+                    df_nuevos['Icono'] = icono_serie
+                    
                     st.session_state.puntos_mapa = pd.concat([st.session_state.puntos_mapa, df_nuevos], ignore_index=True)
-                    st.success("Puntos importados correctamente.")
+                    st.success("Serie importada correctamente.")
                     
         if st.button("🗑️ Limpiar todos los puntos del mapa"):
-            st.session_state.puntos_mapa = pd.DataFrame(columns=['Identificador', 'Latitud', 'Longitud', 'Tipo'])
+            st.session_state.puntos_mapa = pd.DataFrame(columns=['Identificador', 'Latitud', 'Longitud', 'Tipo', 'Color', 'Icono'])
             st.rerun()
 
-    with col_map2:
-        if not st.session_state.puntos_mapa.empty:
-            centro_lat = st.session_state.puntos_mapa['Latitud'].mean()
-            centro_lon = st.session_state.puntos_mapa['Longitud'].mean()
-            zoom_inicial = 10
-        else:
-            centro_lat, centro_lon = 23.6345, -102.5528
-            zoom_inicial = 5
-
-        m = folium.Map(location=[centro_lat, centro_lon], zoom_start=zoom_inicial)
-
-        # --- Controles del mapa agregados ---
-        Fullscreen(
-            position='topright',
-            title='Pantalla Completa',
-            title_cancel='Salir de Pantalla Completa',
-            force_separate_button=True
-        ).add_to(m)
-
-        MeasureControl(
-            position='topleft',
-            primary_length_unit='meters',
-            secondary_length_unit='kilometers',
-            primary_area_unit='sqmeters'
-        ).add_to(m)
-        # ------------------------------------
-
-        folium.TileLayer(
-            tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
-            attr='Esri',
-            name='Topografía y Localidades',
-            overlay=False,
-            control=True
-        ).add_to(m)
-        
-        folium.TileLayer(
-            tiles='OpenStreetMap', 
-            name='Calles estándar (OSM)',
-            overlay=False,
-            control=True
-        ).add_to(m)
-
-        folium.TileLayer(
-            tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-            attr='Esri',
-            name='Satélite (Esri)',
-            overlay=False,
-            control=True
-        ).add_to(m)
-
-        colores_tipo = {"Pozo de Bombeo": "blue", "Piezómetro de Observación": "green", "Manantial": "lightblue"}
-
-        for idx, row in st.session_state.puntos_mapa.iterrows():
-            color_icono = colores_tipo.get(row.get('Tipo', 'Pozo de Bombeo'), "gray")
-            folium.Marker(
-                location=[row['Latitud'], row['Longitud']],
-                popup=folium.Popup(f"<b>{row['Identificador']}</b><br>Lat: {row['Latitud']}<br>Lon: {row['Longitud']}", max_width=300),
-                tooltip=row['Identificador'],
-                icon=folium.Icon(color=color_icono, icon='tint')
-            ).add_to(m)
-
-        folium.LayerControl().add_to(m)
-
-        st_folium(m, width=800, height=500, returned_objects=[])
-
+    # Generación del Mapa (Abarcando todo el ancho)
     if not st.session_state.puntos_mapa.empty:
-        st.subheader("📋 Tabla de Atributos y Simbología")
+        centro_lat = st.session_state.puntos_mapa['Latitud'].mean()
+        centro_lon = st.session_state.puntos_mapa['Longitud'].mean()
+        zoom_inicial = 10
+    else:
+        centro_lat, centro_lon = 23.6345, -102.5528
+        zoom_inicial = 5
+
+    m = folium.Map(location=[centro_lat, centro_lon], zoom_start=zoom_inicial)
+
+    # Controles del mapa
+    Fullscreen(position='topright', title='Pantalla Completa', title_cancel='Salir de Pantalla Completa', force_separate_button=True).add_to(m)
+    MeasureControl(position='topleft', primary_length_unit='meters', secondary_length_unit='kilometers', primary_area_unit='sqmeters').add_to(m)
+
+    # Capas Base
+    folium.TileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', attr='Esri', name='Topografía y Localidades', overlay=False, control=True).add_to(m)
+    folium.TileLayer('OpenStreetMap', name='Calles estándar (OSM)', overlay=False, control=True).add_to(m)
+    folium.TileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attr='Esri', name='Satélite (Esri)', overlay=False, control=True).add_to(m)
+
+    # Agregar Puntos
+    for idx, row in st.session_state.puntos_mapa.iterrows():
+        # Extracción segura de color e ícono (en caso de que falten en datos viejos)
+        color_final = row['Color'] if pd.notna(row.get('Color')) else 'gray'
+        icono_final = row['Icono'] if pd.notna(row.get('Icono')) else 'tint'
+
+        folium.Marker(
+            location=[row['Latitud'], row['Longitud']],
+            popup=folium.Popup(f"<b>{row['Identificador']}</b><br>Lat: {row['Latitud']}<br>Lon: {row['Longitud']}", max_width=300),
+            tooltip=row['Identificador'],
+            icon=folium.Icon(color=color_final, icon=icono_final)
+        ).add_to(m)
+
+    folium.LayerControl().add_to(m)
+
+    # Renderizado a lo ancho de toda la pantalla
+    st_folium(m, use_container_width=True, height=650, returned_objects=[])
+
+    # Tabla en la parte inferior
+    if not st.session_state.puntos_mapa.empty:
+        st.subheader("📋 Tabla de Atributos del Proyecto")
         st.dataframe(st.session_state.puntos_mapa, use_container_width=True)
 
     st.divider()
