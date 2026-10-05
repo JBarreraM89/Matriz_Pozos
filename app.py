@@ -33,6 +33,37 @@ def detectar_flujo_radial(df, col_t, col_s):
     if mejor_ventana: return mejor_ventana
     else: return float(d[col_t].min()), float(d[col_t].iloc[len(d)//3])
 
+# --- FUNCIÓN: Estilo Dinámico de Gráficas ---
+def aplicar_estilo(fig, color_geek, color_std, rellenar=True, modo_geek=False):
+    color_usar = color_geek if modo_geek else color_std
+    rgb = tuple(int(color_usar.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+    rgba_fill = f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, {0.1 if modo_geek else 0.2})"
+    
+    trace_update = dict(
+        line=dict(width=3, color=color_usar), 
+        marker=dict(size=7, color=color_usar, symbol='diamond' if modo_geek else 'circle', line=dict(width=1, color='white' if modo_geek else 'black'))
+    )
+    if rellenar:
+        trace_update['fill'] = 'tozeroy'
+        trace_update['fillcolor'] = rgba_fill
+        
+    fig.update_traces(**trace_update)
+    
+    if modo_geek:
+        fig.update_layout(
+            template="plotly_dark",
+            font=dict(family="Courier New, monospace", size=13, color="#00FFCC"),
+            plot_bgcolor="#050505", paper_bgcolor="#050505",
+            xaxis=dict(showgrid=True, gridwidth=1, gridcolor="#1A1A1A"),
+            yaxis=dict(showgrid=True, gridwidth=1, gridcolor="#1A1A1A"),
+            hovermode="x unified",
+            hoverlabel=dict(bgcolor="black", font_color=color_usar, font_family="Courier New")
+        )
+    else:
+        fig.update_layout(hovermode="x unified")
+        
+    return fig
+
 st.set_page_config(page_title="Análisis de Aforo de Pozos", layout="wide")
 st.title("💧 Sistema de Análisis de Pruebas de Aforo")
 
@@ -137,6 +168,10 @@ if uploaded_file is not None:
     # SECCIÓN 2: ANÁLISIS TÉCNICO
     # ==========================================
     st.header("📉 2. Análisis del Comportamiento del Pozo (Técnico)")
+    
+    # INTERRUPTOR PARA CAMBIAR EL TEMA
+    tema_geek = st.toggle("🕶️ Activar modo 'Dashboard Técnico' (Estilo Geek/Neón)", value=False)
+    
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "Abatimiento Lineal", 
         "Abatimiento (Invertido)", 
@@ -149,14 +184,16 @@ if uploaded_file is not None:
     with tab1:
         st.markdown("**Utilidad:** Observar la tendencia general del descenso del nivel dinámico y confirmar el momento de estabilización.")
         fig1 = px.line(df, x=col_tiempo, y=col_abat, markers=True, title="Evolución del Abatimiento vs Tiempo")
+        fig1 = aplicar_estilo(fig1, color_geek="#00FFFF", color_std="#1f77b4", rellenar=False, modo_geek=tema_geek)
         fig1.update_yaxes(autorange="reversed")
-        st.plotly_chart(fig1, use_container_width=True)
+        st.plotly_chart(fig1, use_container_width=True, theme=None if tema_geek else "streamlit")
 
     with tab2:
         st.markdown("**Utilidad:** Perspectiva física intuitiva de la rapidez con la que 'cae' el nivel de agua en el pozo.")
         fig2 = px.line(df, x=col_abat, y=col_tiempo, markers=True, title="Tiempo transcurrido vs Abatimiento")
+        fig2 = aplicar_estilo(fig2, color_geek="#FF00FF", color_std="#ff7f0e", rellenar=False, modo_geek=tema_geek)
         fig2.update_layout(xaxis_title="Abatimiento (m)", yaxis_title="Tiempo (Horas)")
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, use_container_width=True, theme=None if tema_geek else "streamlit")
 
     with tab3:
         st.markdown("**Utilidad:** La app analiza la derivada del abatimiento para evadir la zona de estabilización y recomendar el segmento de flujo radial óptimo para calcular la Transmisividad (T).")
@@ -173,7 +210,9 @@ if uploaded_file is not None:
             df_fit = df_log[mask]
             
             fig3 = go.Figure()
-            fig3.add_trace(go.Scatter(x=df_log[col_tiempo], y=df_log[col_abat], mode='markers', name='Datos Aforo'))
+            marker_color = '#00FFFF' if tema_geek else '#1f77b4'
+            fig3.add_trace(go.Scatter(x=df_log[col_tiempo], y=df_log[col_abat], mode='markers', name='Datos Aforo', 
+                                      marker=dict(color=marker_color, size=8, symbol='cross' if tema_geek else 'circle')))
             
             if len(df_fit) > 1:
                 slope, intercept = np.polyfit(np.log10(df_fit[col_tiempo]), df_fit[col_abat], 1)
@@ -189,29 +228,45 @@ if uploaded_file is not None:
                     col_res3.metric("Transmisividad (T)", f"{T_calc:.2f} m2/dia")
                     
                     x_line = np.linspace(rango_t[0], rango_t[1], 50)
-                    fig3.add_trace(go.Scatter(x=x_line, y=slope*np.log10(x_line)+intercept, mode='lines', name='Ajuste Lineal', line=dict(color='red', dash='dash')))
+                    line_color = '#FF2A2A' if tema_geek else 'red'
+                    fig3.add_trace(go.Scatter(x=x_line, y=slope*np.log10(x_line)+intercept, mode='lines', name='Ajuste Lineal', 
+                                              line=dict(color=line_color, dash='dash', width=3)))
                 else:
                     st.warning("El segmento seleccionado es demasiado plano (estabilizado). Amplía el rango hacia la izquierda.")
                     
+            if tema_geek:
+                fig3.update_layout(
+                    template="plotly_dark", plot_bgcolor="#050505", paper_bgcolor="#050505",
+                    font=dict(family="Courier New, monospace", size=13, color="#00FFCC"),
+                    xaxis=dict(showgrid=True, gridwidth=1, gridcolor="#1A1A1A"), yaxis=dict(showgrid=True, gridwidth=1, gridcolor="#1A1A1A")
+                )
             fig3.update_layout(xaxis_type="log", xaxis_title="Tiempo (Horas) [Log]", yaxis_title="Abatimiento (m)")
-            st.plotly_chart(fig3, use_container_width=True)
+            st.plotly_chart(fig3, use_container_width=True, theme=None if tema_geek else "streamlit")
 
     with tab4:
         st.markdown("**Utilidad:** Verifica la estabilidad del bombeo operativo.")
         fig4 = px.line(df, x=col_tiempo, y=col_caudal, markers=True, title="Comportamiento del Caudal (LPS)")
-        fig4.update_traces(line_color='green')
-        st.plotly_chart(fig4, use_container_width=True)
+        fig4 = aplicar_estilo(fig4, color_geek="#39FF14", color_std="#2ca02c", rellenar=False, modo_geek=tema_geek)
+        st.plotly_chart(fig4, use_container_width=True, theme=None if tema_geek else "streamlit")
 
     with tab5:
         st.markdown("**Utilidad:** Muestra la eficiencia hidráulica (Q/s).")
         fig5 = px.line(df, x=col_tiempo, y='Capacidad_Especifica', markers=True, title="Evolución de la Capacidad Específica (LPS/m)")
-        fig5.update_traces(line_color='purple')
-        st.plotly_chart(fig5, use_container_width=True)
+        fig5 = aplicar_estilo(fig5, color_geek="#FFEA00", color_std="#9467bd", rellenar=False, modo_geek=tema_geek)
+        st.plotly_chart(fig5, use_container_width=True, theme=None if tema_geek else "streamlit")
 
     with tab6:
         st.markdown("**Utilidad:** Desempeño electromecánico para justificar dimensión de la bomba.")
-        fig6 = px.scatter(df, x=col_hz, y=col_caudal, color=col_tiempo, title="Desempeño Electromecánico (Hz vs LPS)", color_continuous_scale='viridis')
-        st.plotly_chart(fig6, use_container_width=True)
+        fig6 = px.scatter(df, x=col_hz, y=col_caudal, color=col_tiempo, title="Desempeño Electromecánico (Hz vs LPS)", 
+                          color_continuous_scale='Turbo' if tema_geek else 'viridis')
+        if tema_geek:
+            fig6.update_layout(
+                template="plotly_dark", plot_bgcolor="#050505", paper_bgcolor="#050505",
+                font=dict(family="Courier New, monospace", size=13, color="#00FFCC"),
+                xaxis=dict(showgrid=True, gridwidth=1, gridcolor="#1A1A1A"), yaxis=dict(showgrid=True, gridwidth=1, gridcolor="#1A1A1A")
+            )
+        fig6.update_traces(marker=dict(size=10, line=dict(width=1, color='white' if tema_geek else 'black')))
+        st.plotly_chart(fig6, use_container_width=True, theme=None if tema_geek else "streamlit")
 
     st.divider()
 
@@ -243,15 +298,35 @@ if uploaded_file is not None:
         Y = R * np.sin(Theta)
         Z = -np.tile(abatimientos, (50, 1))
         
-        fig_3d = go.Figure(data=[go.Surface(z=Z, x=X, y=Y, colorscale='Viridis', opacity=0.8)])
-        fig_3d.update_layout(scene=dict(zaxis=dict(range=[np.min(Z)*1.1, 0])), margin=dict(l=0, r=0, b=0, t=30))
-        st.plotly_chart(fig_3d, use_container_width=True)
+        colorscale_3d = 'Plasma' if tema_geek else 'Viridis'
+        fig_3d = go.Figure(data=[go.Surface(z=Z, x=X, y=Y, colorscale=colorscale_3d, opacity=0.9)])
+        
+        if tema_geek:
+            fig_3d.update_layout(
+                template="plotly_dark", paper_bgcolor="#050505",
+                font=dict(family="Courier New, monospace", color="#00FFCC"),
+                scene=dict(xaxis=dict(showgrid=True, gridcolor="#333", backgroundcolor="#050505"),
+                           yaxis=dict(showgrid=True, gridcolor="#333", backgroundcolor="#050505"))
+            )
+        fig_3d.update_layout(scene=dict(zaxis=dict(range=[np.min(Z)*1.1, 0]), zaxis_title="Abatimiento (m)"), margin=dict(l=0, r=0, b=0, t=30))
+        st.plotly_chart(fig_3d, use_container_width=True, theme=None if tema_geek else "streamlit")
 
     with tab_2d:
         fig_2d = go.Figure()
-        fig_2d.add_trace(go.Scatter(x=radios, y=abatimientos, mode='lines', fill='tozeroy'))
-        fig_2d.update_layout(xaxis_type="log", yaxis=dict(autorange="reversed"), xaxis_title="Distancia (m)", yaxis_title="Abatimiento (m)", height=400)
-        st.plotly_chart(fig_2d, use_container_width=True)
+        line_color = '#00FFFF' if tema_geek else '#1f77b4'
+        fill_color = 'rgba(0, 255, 255, 0.2)' if tema_geek else 'rgba(31, 119, 180, 0.2)'
+        
+        fig_2d.add_trace(go.Scatter(x=radios, y=abatimientos, mode='lines', fill='tozeroy', 
+                                    line=dict(color=line_color, width=3), fillcolor=fill_color))
+        
+        if tema_geek:
+            fig_2d.update_layout(
+                template="plotly_dark", plot_bgcolor="#050505", paper_bgcolor="#050505",
+                font=dict(family="Courier New, monospace", size=13, color="#00FFCC"),
+                yaxis=dict(showgrid=True, gridcolor="#1A1A1A"), xaxis=dict(showgrid=True, gridcolor="#1A1A1A")
+            )
+        fig_2d.update_layout(xaxis_type="log", yaxis=dict(autorange="reversed"), xaxis_title="Distancia Radial (m)", yaxis_title="Abatimiento (m)", height=400, hovermode="x unified")
+        st.plotly_chart(fig_2d, use_container_width=True, theme=None if tema_geek else "streamlit")
         
     st.divider()
 
