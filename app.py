@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import numpy as np
 from scipy.special import exp1
 import folium
+from folium.plugins import Fullscreen, MeasureControl
 from streamlit_folium import st_folium
 
 # --- GESTOR DE ESTADO PARA EL MAPA ---
@@ -373,6 +374,22 @@ if uploaded_file is not None:
             zoom_inicial = 5
 
         m = folium.Map(location=[centro_lat, centro_lon], zoom_start=zoom_inicial)
+
+        # --- Controles del mapa agregados ---
+        Fullscreen(
+            position='topright',
+            title='Pantalla Completa',
+            title_cancel='Salir de Pantalla Completa',
+            force_separate_button=True
+        ).add_to(m)
+
+        MeasureControl(
+            position='topleft',
+            primary_length_unit='meters',
+            secondary_length_unit='kilometers',
+            primary_area_unit='sqmeters'
+        ).add_to(m)
+        # ------------------------------------
 
         folium.TileLayer(
             tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
